@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Kitchen Hygiene Analyzer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 2rem;
+      background-color: #f9f9f9;
+    }
+
+    h1, h2 {
+      color: #333;
+    }
+
+    form {
+      background-color: #fff;
+      padding: 1rem;
+      border: 1px solid #ccc;
+      margin-bottom: 2rem;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+
+    textarea, input[type="file"], button {
+      display: block;
+      margin-top: 1rem;
+      width: 100%;
+      padding: 0.5rem;
+      font-size: 1rem;
+    }
+
+    #main-container {
+      display: flex;
+      gap: 2rem;
+    }
+
+    #results, #alerts {
+      max-height: 400px;
+      overflow-y: auto;
+      padding: 1rem;
+      background-color: #fff;
+      border: 1px solid #ccc;
+      flex: 1;
+    }
+
+    #alerts {
+      border-left: 4px solid red;
+    }
+
+    .frame {
+      margin-bottom: 0.5rem;
+    }
+
+    .alert {
+      color: red;
+      font-weight: bold;
+    }
+
+    #historyResults {
+      background: #fff;
+      border: 1px solid #ccc;
+      padding: 1rem;
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <h1>👨‍🍳 Kitchen Hygiene Analyzer</h1>
+
+  <form id="uploadForm">
+    <label>Upload Video</label>
+    <input type="file" name="file" required />
+
+    <label>Restricted Objects (comma-separated)</label>
+    <textarea name="restricted_objects" placeholder="knife,gun,dog" required></textarea>
+
+    <label>Instruction for Frame Description</label>
+    <textarea name="question" placeholder="Describe hygiene..." required></textarea>
+
+    <button type="submit">Upload & Analyze</button>
+  </form>
+
+  <div id="main-container">
+    <div>
+      <h2>📽️ Frame Descriptions</h2>
+      <div id="results"></div>
+    </div>
+    <div>
+      <h2>🚨 Alerts</h2>
+      <div id="alerts"></div>
+    </div>
+  </div>
+
+  <hr>
+  <h2>📜 Search History</h2>
+  <input type="text" id="searchQuery" placeholder="Search by keyword (e.g. gloves, mask)" />
+  <button onclick="search()">Search</button>
+  <div id="historyResults"></div>
+
+  <script>
+    let videoId = null;
+    let initialMessageShown = false;
+
+    const form = document.getElementById('uploadForm');
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const res = await fetch('/upload', {
+        method: 'POST',
+        body: formData
+      });
+      const data = await res.json();
+      videoId = data.video_id;
+      document.getElementById('alerts').innerHTML = "⏳ Processing started. Please wait...";
+      initialMessageShown = true;
+
+      // Start polling
+      pollStatus();
+    };
+
+    async function pollStatus() {
+      if (!videoId) return;
+
+      const res = await fetch(`/status?video_id=${videoId}`);
+      const data = await res.json();
+
+      // Descriptions
+      if (data.frames.length > 0) {
+        const descriptions = data.frames.map(f => `<div class="frame"><b>[${f.time}s]</b> ${f.desc}</div>`).join('');
+        document.getElementById('results').innerHTML = descriptions;
+      } else if (!initialMessageShown) {
+        document.getElementById('results').innerHTML = "<p><i>No frames processed yet...</i></p>";
+      }
+
+      // Alerts
+      if (data.alerts.length > 0) {
+        const alerts = data.alerts.map(a => `<li>${a}</li>`).join('');
+        document.getElementById('alerts').innerHTML = "<ul>" + alerts + "</ul>";
+      } else if (initialMessageShown) {
+        document.getElementById('alerts').innerHTML = "<p>✅ No alerts yet.</p>";
+      }
+
+      setTimeout(pollStatus, 3000); // poll every 3 seconds
+    }
+
+    async function search() {
+      const q = document.getElementById("searchQuery").value;
+      const res = await fetch(`/search?q=${q}`);
+      const data = await res.json();
+
+      if (data.length === 0) {
+        document.getElementById("historyResults").innerHTML = "<p>No results found.</p>";
+        return;
+      }
+
+      const results = data.map(f => `<div><b>[${f.time}s]</b> ${f.desc} ${f.alert ? `<span class='alert'>${f.alert}</span>` : ""}</div>`).join('');
+      document.getElementById("historyResults").innerHTML = results;
+    }
+  </script>
+</body>
+</html>
